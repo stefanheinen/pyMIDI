@@ -23,4 +23,4 @@ Everything is still a bit brittle, and not everything is programmed thread safe.
 If you're interested in how the controller talks to your computer,
 here's what I found out reverse engineering the Traktor X1 MK3's and Z1 MK2's protocol:
 
-[Protocol Specification](docs/Native Instruments Traktor X1 MK3 and Z1 MK2 HID Protocol Specification.md)
+[Protocol Specification](docs/Native%20Instruments%20Traktor%20X1%20MK3%20and%20Z1%20MK2%20HID%20Protocol%20Specification.md)
