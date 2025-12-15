@@ -1,6 +1,6 @@
 I reverse engineered the protocol specification by recording the exchange between the Traktor software and my X1 MK3 and Z1 MK2.
 
-Thanks to @infifox for pointing me in the right direction with his work in his [Mixxx controller scripts for Traktor Z1 MK2 and X1 MK3 controllers](https://github.com/infifox/mixxx-traktor-controllers).
+Thanks to [@infifox](https://github.com/infifox) for pointing me in the right direction with his work in his [Mixxx controller scripts for Traktor Z1 MK2 and X1 MK3 controllers](https://github.com/infifox/mixxx-traktor-controllers).
 
 # Displays
 A display on the X1 MK3 and the Z1 MK2 has 128 x 64 pixels.
