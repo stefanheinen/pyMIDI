@@ -1,46 +1,16 @@
-import time
-from abc import ABC, abstractmethod
+from abc import ABC
+from typing import List
 
 import mido
-
 import devices.device
 
 class MIDI_Device(devices.device.Device, ABC):
     MIDI_port_name: str
     PROTOCOL = "MIDI"
-    DISPLAY_SIZE: (int, int)
-    DISPLAY_COUNT: int
 
     def __init__(self):
         super().__init__()
         self.midi_device = None
-
-    @abstractmethod
-    def decode_events(self, msg):
-        pass
-
-    @abstractmethod
-    def startup(self, animation = True):
-        pass
-
-    def write_display_image(self, display: int, image):
-        pass
-
-    def clear_displays(self):
-        pass
-
-    def clear_display(self, display: int):
-        pass
-
-    def flush_leds(self):
-        pass
-
-    def text_to_display(self, display: int, text: str, font="", size=0):
-        pass
-
-    @abstractmethod
-    def set_led(self, led_name: str, color):
-        pass
 
     def _open_connected_device(self):
         self.midi_device = mido.open_ioport(self.MIDI_port_name)
@@ -55,8 +25,8 @@ class MIDI_Device(devices.device.Device, ABC):
     def _read_connected_device(self):
         return self.midi_device.receive(block=False)
 
-    def _request_control_status_connected_device(self):
-        return None
+    def _request_control_status_connected_device(self) -> List:
+        return []
 
     def _exists_connected_device(self):
         if self.midi_device:
@@ -67,7 +37,7 @@ class MIDI_Device(devices.device.Device, ABC):
 
 class MIDIEvent:
     def __init__(self, type = None, channel = None, control = None, note = None, value = None, velocity = None):
-        self.type = None
+        self.type = type
         self.channel = channel
         self.control = control
         self.note = note

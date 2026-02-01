@@ -1,14 +1,17 @@
 import threading
-from abc import abstractmethod
+import uuid
+from abc import ABC, abstractmethod
 import queue
 from queue import Queue
 from threading import Thread
-from logging import info, warning
+from logging import info, warning, error
 import time
 
-class Device:
+class Device(ABC):
     PROTOCOL: str
     DEVICE_NAME: str
+
+    id: uuid.UUID
 
     _status: str
     _lock: threading.Lock
@@ -21,6 +24,7 @@ class Device:
         self.stop_threads = threading.Event()
         self._status = ""
         self._lock = threading.Lock()
+        self.id = uuid.uuid4()
 
     def get_status(self):
         with self._lock:
@@ -31,6 +35,14 @@ class Device:
             self._status = status
 
     ### START Device Specific Methods: These methods must be implemented by every device.
+    @abstractmethod
+    def init(self, animation = True):
+        pass
+
+    @abstractmethod
+    def shutdown(self):
+        pass
+
     @abstractmethod
     def _open_connected_device(self):
         pass
@@ -58,19 +70,15 @@ class Device:
     @abstractmethod
     def decode_events(self, msg):
         pass
-
-    @abstractmethod
-    def startup(self, animation = True):
-        pass
     ### END Device Specific Methods: These methods must be implemented by every device.
 
     def open(self, receive_queue: Queue | None):
         try:
             self._open_connected_device()
             self.set_status("connected")
-        except:
-            self.set_status("")
-            return
+        except Exception as e:
+            self.set_status("disconnected")
+            raise e
 
         self.stop_threads.clear()
         self.send_queue = Queue()
@@ -86,17 +94,21 @@ class Device:
 
     def close(self):
         self.stop_threads.set()
-        time.sleep(0.3)
+        if self.send_thread:
+            self.send_thread.join()
+        if self.receive_thread:
+            self.receive_thread.join()
+
         self._close_connected_device()
-        time.sleep(0.2)
 
     def send_thread_function(self, q: Queue):
+        info(f"{self.PROTOCOL}:{self.DEVICE_NAME}: Send Thread starting")
         while not self.stop_threads.is_set():
             try:
                 if not self._exists_connected_device():
-                    time.sleep(0.2)
+                    time.sleep(0.3)
                     continue
-                msg = q.get(timeout=0.3)
+                msg = q.get(timeout=1)
                 if msg:
                     self._write_connected_device(msg)
             except queue.Empty:
@@ -109,19 +121,21 @@ class Device:
         info(f"{self.PROTOCOL}:{self.DEVICE_NAME}: Send thread shutting down")
 
     def receive_thread_function(self, q):
+        info(f"{self.PROTOCOL}:{self.DEVICE_NAME}: Receive Thread starting")
         def process_msg(report):
             if report:
                 events = self.decode_events(report)
                 if events:
                     for e in events:
-                        q.put((self, e))
+                        q.put((self.id, self.PROTOCOL, self.DEVICE_NAME, e))
 
-        process_msg(self._request_control_status_connected_device())
+        for report in self._request_control_status_connected_device():
+            process_msg(report)
 
         while not self.stop_threads.is_set():
             try:
                 if not self._exists_connected_device():
-                    time.sleep(0.1)
+                    time.sleep(0.3)
                     continue
                 msg = self._read_connected_device()
                 if msg:

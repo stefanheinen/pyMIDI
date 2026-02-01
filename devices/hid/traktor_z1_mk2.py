@@ -9,10 +9,25 @@ class HIDDevice(Native_Instruments_HID_Device):
     DISPLAY_SIZE = (128, 64)
     DISPLAY_COUNT = 3
 
+    BACKLIGHT_LEDS = [
+        "1:BACKLIGHT_1",
+        "1:BACKLIGHT_2",
+        "1:BACKLIGHT_3",
+        "1:BACKLIGHT_4",
+        "1:BACKLIGHT_5",
+        "1:BACKLIGHT_6",
+        "0:BACKLIGHT_6",
+        "0:BACKLIGHT_5",
+        "0:BACKLIGHT_4",
+        "0:BACKLIGHT_3",
+        "0:BACKLIGHT_2",
+        "0:BACKLIGHT_1"
+    ]
+
     def __init__(self):
         super().__init__()
 
-        self.previousReport = None
+        self._previousReport = [None]
 
         self.LED_bytes = {
             "0:M1": self.LEDColor.BLACK,
@@ -62,136 +77,210 @@ class HIDDevice(Native_Instruments_HID_Device):
             "1:BACKLIGHT_6": self.LEDColor.BLACK
         }
 
-    def decode_button_events(self, cur):
+    # led coordinates on the device in mm from the top left corner, ( x, y)
+    LED_COORDINATES = {
+        "2:FX1_BUTTON": ( 52,   172),
+        "2:FX2_BUTTON": ( 73,   172),
+        "2:FX3_BUTTON": ( 52,   187),
+        "2:FX4_BUTTON": ( 73,   187),
+        "2:-":          ( 65,   204),
+        "2:HEADPHONE_L": ( 52,  223),
+        "2:HEADPHONE_R": ( 73,  223),
+        "0:FX_TOGGLE": ( 20,   208),
+        "1:FX_TOGGLE": ( 110,  208),
+        "0:MODE_MIX":    ( 13, 13),
+        "0:MODE_STEMS":    ( 25, 13),
+        "1:MODE_MIX":    ( 103, 13),
+        "1:MODE_STEMS":    ( 114, 13),
+        "1:BACKLIGHT_1": ( 94, 262),
+        "1:BACKLIGHT_2": ( 94, 229),
+        "1:BACKLIGHT_3": ( 94, 195),
+        "1:BACKLIGHT_4": ( 94, 164),
+        "1:BACKLIGHT_5": ( 94, 129),
+        "1:BACKLIGHT_6": ( 94, 96),
+        "0:BACKLIGHT_6": ( 32, 96),
+        "0:BACKLIGHT_5": ( 32, 129),
+        "0:BACKLIGHT_4": ( 32, 164),
+        "0:BACKLIGHT_3": ( 32, 195),
+        "0:BACKLIGHT_2": ( 32, 229),
+        "0:BACKLIGHT_1": ( 32, 262),
+        "0:M1": ( 52, 289),
+        "0:M2": ( 52, 283),
+        "0:M3": ( 52, 277),
+        "0:M4": ( 52, 271),
+        "0:M5": ( 52, 265),
+        "0:M6": ( 52, 258),
+        "0:M7": ( 52, 252),
+        "0:M8": ( 52, 246),
+        "0:M9": ( 52, 240),
+        "0:M10": ( 52, 234),
+        "1:M1": ( 77, 289),
+        "1:M2": ( 77, 283),
+        "1:M3": ( 77, 277),
+        "1:M4": ( 77, 271),
+        "1:M5": ( 77, 265),
+        "1:M6": ( 77, 258),
+        "1:M7": ( 77, 252),
+        "1:M8": ( 77, 246),
+        "1:M9": ( 77, 240),
+        "1:M10": ( 77, 234),
+    }
+
+    # screen center point coordinates on the device in mm from the top left corner, ( x, y)
+    SCREEN_COORDINATES = {
+        "0": ( 23,   34 ),
+        "1": ( 64,   34 ),
+        "2": ( 117,  34 )
+    }
+
+    # screen size ( x, y)
+    SCREEN_SIZES = {
+        "0": ( 21, 10 ),
+        "1": ( 21, 10 ),
+        "2": ( 21, 10 )
+    }
+
+    def _decode_button_events(self, current_report):
         events = []
+        prev = self._get_previous_report(current_report)
 
-        if e:=self.decode_bit_byte("0:MODE_MIX", 0, 0, cur): events.append(e)
-        if e:=self.decode_bit_byte("0:MODE_STEMS", 0, 1, cur): events.append(e)
-        if e:=self.decode_bit_byte("2:MODE", 0, 2, cur): events.append(e)
-        if e:=self.decode_bit_byte("1:MODE_MIX", 0, 3, cur): events.append(e)
-        if e:=self.decode_bit_byte("1:MODE_STEMS", 0, 4, cur): events.append(e)
-        if e:=self.decode_bit_byte("0:FX_TOGGLE", 0, 5, cur): events.append(e)
-        if e:=self.decode_bit_byte("1:FX_TOGGLE", 0, 6, cur): events.append(e)
-        if e:=self.decode_bit_byte("2:FX1_BUTTON", 0, 7, cur): events.append(e)
+        if not prev:
+            return []
 
-        if e:=self.decode_bit_byte("2:FX2_BUTTON", 1, 0, cur): events.append(e)
-        if e:=self.decode_bit_byte("2:FX3_BUTTON", 1, 1, cur): events.append(e)
-        if e:=self.decode_bit_byte("2:FX4_BUTTON", 1, 2, cur): events.append(e)
-        if e:=self.decode_bit_byte("2:-", 1, 3, cur): events.append(e)
-        if e:=self.decode_bit_byte("2:HEADPHONE_L", 1, 4, cur): events.append(e)
-        if e:=self.decode_bit_byte("2:HEADPHONE_R", 1, 5, cur): events.append(e)
+        if e:=self._decode_bit_byte("0:MODE_MIX", 1, 0, current_report): events.append(e)
+        if e:=self._decode_bit_byte("0:MODE_STEMS", 1, 1, current_report): events.append(e)
+        if e:=self._decode_bit_byte("2:MODE", 1, 2, current_report): events.append(e)
+        if e:=self._decode_bit_byte("1:MODE_MIX", 1, 3, current_report): events.append(e)
+        if e:=self._decode_bit_byte("1:MODE_STEMS", 1, 4, current_report): events.append(e)
+        if e:=self._decode_bit_byte("0:FX_TOGGLE", 1, 5, current_report): events.append(e)
+        if e:=self._decode_bit_byte("1:FX_TOGGLE", 1, 6, current_report): events.append(e)
+        if e:=self._decode_bit_byte("2:FX1_BUTTON", 1, 7, current_report): events.append(e)
+
+        if e:=self._decode_bit_byte("2:FX2_BUTTON", 2, 0, current_report): events.append(e)
+        if e:=self._decode_bit_byte("2:FX3_BUTTON", 2, 1, current_report): events.append(e)
+        if e:=self._decode_bit_byte("2:FX4_BUTTON", 2, 2, current_report): events.append(e)
+        if e:=self._decode_bit_byte("2:-", 2, 3, current_report): events.append(e)
+        if e:=self._decode_bit_byte("2:HEADPHONE_L", 2, 4, current_report): events.append(e)
+        if e:=self._decode_bit_byte("2:HEADPHONE_R", 2, 5, current_report): events.append(e)
 
         return events
 
-    def decode_poti_events(self, current):
+    def _decode_poti_events(self, current_report):
         events = []
-        prev = self.previousReport
+        prev = self._get_previous_report(current_report)
 
-        value = (current[3] << 8) | current[2]
-        prev_value = (prev[3] << 8) | prev[2]
+        if not prev:
+            return []
+
+        value = (current_report[4] << 8) | current_report[3]
+        prev_value = (prev[4] << 8) | prev[3]
         if value != prev_value:
             events.append(f"0:GAIN:{value}")
 
-        value = (current[5] << 8) | current[4]
-        prev_value = (prev[5] << 8) | prev[4]
+        value = (current_report[6] << 8) | current_report[5]
+        prev_value = (prev[6] << 8) | prev[5]
         if value != prev_value:
             events.append(f"0:HI:{value}")
 
-        value = (current[7] << 8) | current[6]
-        prev_value = (prev[7] << 8) | prev[6]
+        value = (current_report[8] << 8) | current_report[7]
+        prev_value = (prev[8] << 8) | prev[7]
         if value != prev_value:
             events.append(f"0:MID:{value}")
 
-        value = (current[9] << 8) | current[8]
-        prev_value = (prev[9] << 8) | prev[8]
+        value = (current_report[10] << 8) | current_report[9]
+        prev_value = (prev[10] << 8) | prev[9]
         if value != prev_value:
             events.append(f"0:LOW:{value}")
 
-        value = (current[11] << 8) | current[10]
-        prev_value = (prev[11] << 8) | prev[10]
+        value = (current_report[12] << 8) | current_report[11]
+        prev_value = (prev[12] << 8) | prev[11]
         if value != prev_value:
             events.append(f"0:FX:{value}")
 
-        value = (current[13] << 8) | current[12]
-        prev_value = (prev[13] << 8) | prev[12]
+        value = (current_report[14] << 8) | current_report[13]
+        prev_value = (prev[14] << 8) | prev[13]
         if value != prev_value:
             events.append(f"1:GAIN:{value}")
 
-        value = (current[15] << 8) | current[14]
-        prev_value = (prev[15] << 8) | prev[14]
+        value = (current_report[16] << 8) | current_report[15]
+        prev_value = (prev[16] << 8) | prev[15]
         if value != prev_value:
             events.append(f"1:HI:{value}")
 
-        value = (current[17] << 8) | current[16]
-        prev_value = (prev[17] << 8) | prev[16]
+        value = (current_report[18] << 8) | current_report[17]
+        prev_value = (prev[18] << 8) | prev[17]
         if value != prev_value:
             events.append(f"1:MID:{value}")
 
-        value = (current[19] << 8) | current[18]
-        prev_value = (prev[19] << 8) | prev[18]
+        value = (current_report[20] << 8) | current_report[19]
+        prev_value = (prev[20] << 8) | prev[19]
         if value != prev_value:
             events.append(f"1:LOW:{value}")
 
-        value = (current[21] << 8) | current[20]
-        prev_value = (prev[21] << 8) | prev[20]
+        value = (current_report[22] << 8) | current_report[21]
+        prev_value = (prev[22] << 8) | prev[21]
         if value != prev_value:
             events.append(f"1:FX:{value}")
 
-        value = (current[23] << 8) | current[22]
-        prev_value = (prev[23] << 8) | prev[22]
+        value = (current_report[24] << 8) | current_report[23]
+        prev_value = (prev[24] << 8) | prev[23]
         if value != prev_value:
             events.append(f"2:HP_MIX:{value}")
 
-        value = (current[25] << 8) | current[24]
-        prev_value = (prev[25] << 8) | prev[24]
+        value = (current_report[26] << 8) | current_report[25]
+        prev_value = (prev[26] << 8) | prev[25]
         if value != prev_value:
             events.append(f"2:MAIN:{value}")
 
-        value = (current[27] << 8) | current[26]
-        prev_value = (prev[27] << 8) | prev[26]
+        value = (current_report[28] << 8) | current_report[27]
+        prev_value = (prev[28] << 8) | prev[27]
         if value != prev_value:
             events.append(f"2:HP_VOL:{value}")
 
-        value = (current[29] << 8) | current[28]
-        prev_value = (prev[29] << 8) | prev[28]
+        value = (current_report[30] << 8) | current_report[29]
+        prev_value = (prev[30] << 8) | prev[29]
         if value != prev_value:
             events.append(f"0:FADER:{value}")
 
-        value = (current[31] << 8) | current[30]
-        prev_value = (prev[31] << 8) | prev[30]
+        value = (current_report[32] << 8) | current_report[31]
+        prev_value = (prev[32] << 8) | prev[31]
         if value != prev_value:
             events.append(f"1:FADER:{value}")
 
-        value = (current[33] << 8) | current[32]
-        prev_value = (prev[33] << 8) | prev[32]
+        value = (current_report[34] << 8) | current_report[33]
+        prev_value = (prev[34] << 8) | prev[33]
         if value != prev_value:
             events.append(f"2:FADER:{value}")
 
         return events
 
-    def decode_events(self, current):
-        current = current[1:]
+    def decode_events(self, current_report):
         events = []
 
-        if current == self.previousReport:
+        if self._get_previous_report(current_report) is None:
+            self._set_previous_report(current_report)
             return []
 
-        if not self.previousReport:
-            self.previousReport = current
+        if current_report == self._get_previous_report(current_report):
             return []
 
-        events.extend(self.decode_button_events(current))
-        events.extend(self.decode_poti_events(current))
+        events.extend(self._decode_button_events(current_report))
+        events.extend(self._decode_poti_events(current_report))
 
-        self.previousReport = current
+        self._set_previous_report(current_report)
 
         # if the event has not been mapped, print the raw hid report to help with mapping
         if not events:
-            print(list(current))
+            print(" ".join(f"{i:02d}:{x:03d}" for i, x in enumerate(list(current_report))))
 
         return events
 
     def flush_leds(self):
+        if self.LED_bytes == self._last_led_bytes:
+            return
+
+        self._last_led_bytes = self.LED_bytes.copy()
+
         report_bytes = list(self.LED_bytes.values())
         report_bytes.insert(0, 0x80)
         report_bytes.insert(23, 0x00)
@@ -222,9 +311,10 @@ class HIDDevice(Native_Instruments_HID_Device):
         self.flush_leds()
 
     def mixer_leds_from_fader(self):
-        if self.previousReport:
-            value0 = (self.previousReport[29] << 8) | self.previousReport[28]
-            value1 = (self.previousReport[31] << 8) | self.previousReport[30]
+        prev = self._get_previous_report(bytes([1]))
+        if prev:
+            value0 = (prev[30] << 8) | prev[29]
+            value1 = (prev[32] << 8) | prev[31]
             self.mixer_leds_from_value(0, value0)
             self.mixer_leds_from_value(1, value1)
 

@@ -1,28 +1,21 @@
-import pyautogui
 from devices.hid.native_instruments_hid_device import Native_Instruments_HID_Device
-from devices.hid.traktor_z1_mk2 import HIDDevice as Z1_Device
+from devices.hid.traktor_z1_mk2 import HIDDevice as Z1_HID_Device
+from devices.midi.traktor_z1_mk2 import Device as Z1_MIDI_Device
 
 from event_to_app_maps.native_instruments_event_to_app_map import NIEventToAppMap
 
 class EventToAppToAppMap(NIEventToAppMap):
+    NAME = "DaVinci Resolve"
     APP_NAME_DISPLAY = 2
     HELP_BUTTON = "2:MODE"
     HELP_DISPLAYS = (0, 1)
+    APPLICATION_NAME = "Davinci Resolve"
 
     MOD = {}
 
-    def __init__(self, device: Z1_Device):
+    def __init__(self, device: Z1_HID_Device | Z1_MIDI_Device):
         super().__init__(device)
         self.device = device
-
-    def handle_event(self, event: str):
-        super().handle_event(event)
-
-        channel, control, value = event.split(":")
-        if control == "FADER":
-            self.device.mixer_leds_from_fader()
-
-        if self.MOD["HELP"]: return
 
     HELP_TEXTS = {
         # "0:MODE_MIX": ("Left Mix", "(unassigned)"),
@@ -58,7 +51,23 @@ class EventToAppToAppMap(NIEventToAppMap):
     }
 
     def init_leds(self):
-        for k, v in self.BUTTON_COLORS.items():
-            self.device.set_led(k, v[0])
         self.device.mixer_leds_from_fader()
+        super().init_leds()
+
+    def set_default_led_color(self, led, color_index = 0):
+        channel, led_name = led.split(":")
+        if led_name in [f"M{i}" for i in range(1, 11)]:
+            return
+
+        super().set_default_led_color(led, color_index)
+
+    def handle_event(self, event: str):
+        super().handle_event(event)
+
+        channel, control, value = event.split(":")
+        if control == "FADER":
+            self.device.mixer_leds_from_fader()
+
+        if self.MOD["HELP"]: return
+
         self.device.flush_leds()

@@ -2,9 +2,10 @@ import time
 
 import mido
 
-from .midi_device import MIDIEvent, MIDI_Device
+from .midi_device import MIDIEvent
+from .native_instruments_midi_device import Native_Instruments_MIDI_Device
 
-class Device(MIDI_Device):
+class Device(Native_Instruments_MIDI_Device):
     MIDI_port_name = "Traktor Z1 MK2"
     DEVICE_NAME = "TRAKTOR Z1 MK2"
     DISPLAY_SIZE = (128, 64)
@@ -176,7 +177,7 @@ class Device(MIDI_Device):
     def shutdown(self):
         self.leds_off()
 
-    def startup(self, animation = True):
+    def init(self, animation = True):
         if animation:
             self.startup_animation()
         self.leds_off()

@@ -1,6 +1,9 @@
+import random
 from enum import IntEnum
+from typing import Tuple, Dict, List
+
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from pathlib import Path
 import time
 from logging import warning
@@ -9,11 +12,11 @@ from devices.hid.hid_device import HID_Device
 
 from globals import PROJECT_ROOT
 
-class Native_Instruments_HID_Device(HID_Device):
-    previousReport: bytes | None
-    LED_bytes: {}
-    DISPLAY_SIZE: (int, int)
-    DISPLAY_COUNT: int
+class Native_Instruments_HID_Device(HID_Device, ABC):
+    _previousReport: List[bytes | None]
+    LED_bytes: Dict
+    DISPLAY_SIZE: Tuple[int, int] = (0, 0)
+    DISPLAY_COUNT: int = 0
 
     # LED color constants
     class LEDColor(IntEnum):
@@ -24,7 +27,7 @@ class Native_Instruments_HID_Device(HID_Device):
         DARK_ORANGE = 0x0A
         LIGHT_ORANGE_DIM = 0x0C
         LIGHT_ORANGE = 0x0E
-        WARM_ORANGE_DIM = 0x10
+        WARM_YELLOW_DIM = 0x10
         WARM_YELLOW = 0x12
         YELLOW_DIM = 0x14
         YELLOW = 0x16
@@ -48,9 +51,14 @@ class Native_Instruments_HID_Device(HID_Device):
         PURPLE = 0x3A
         MAGENTA_DIM = 0x3C
         MAGENTA = 0x3E
-        FUSCHIA_DARK = 0x40
-        FUSCHIA = 0x42
+        FUCHSIA_DARK = 0x40
+        FUCHSIA = 0x42
+        WHITE_DIM = 0x44
         WHITE = 0x46
+
+    def LEDCOLOR_RANDOM(self, colors=LEDColor):
+        while True:
+            yield random.choice(list(colors))
 
     class LEDColor_Bright(IntEnum):
         RED = 0x06
@@ -71,9 +79,43 @@ class Native_Instruments_HID_Device(HID_Device):
         FUCHSIA = 0x42
         WHITE = 0x46
 
+    class LEDColor_Dim(IntEnum):
+        RED_DIM = 0x04
+        DARK_ORANGE_DIM = 0x08
+        LIGHT_ORANGE_DIM = 0x0C
+        WARM_ORANGE_DIM = 0x10
+        YELLOW_DIM = 0x14
+        LIME_DIM = 0x18
+        GREEN_DIM = 0x1C
+        MINT_DIM = 0x20
+        CYAN_DIM = 0x24
+        TURQUOISE_DIM = 0x28
+        BLUE_DIM = 0x2C
+        PLUM_DIM = 0x30
+        VIOLET_DIM = 0x34
+        PURPLE_DIM = 0x38
+        MAGENTA_DIM = 0x3C
+        FUCHSIA_DARK = 0x40
+
+    def __init__(self):
+        super().__init__()
+        self._last_led_bytes = None
+
+    def _get_previous_report(self, current_report:bytes) -> bytes:
+        return self._previousReport[current_report[0] - 1]
+
+    def _set_previous_report(self, current_report:bytes):
+        self._previousReport[current_report[0] - 1] = current_report
+
     @abstractmethod
     def flush_leds(self):
         pass
+
+    def set_led(self, led_name: str, color: LEDColor):
+        if led_name in self.LED_bytes:
+            self.LED_bytes[led_name] = color
+        else:
+            warning(f"Unknown LED: \"{led_name}\"")
 
     def leds_off(self):
         for l in self.LED_bytes:
@@ -85,11 +127,13 @@ class Native_Instruments_HID_Device(HID_Device):
             self.set_led(l, color)
             self.flush_leds()
 
-    def shutdown(self):
-        self.clear_displays()
-        self.leds_off()
+    def get_led_coordinates(self, led):
+        if hasattr(self, "LED_COORDINATES"):
+            if led in self.LED_COORDINATES:
+                return self.LED_COORDINATES[led]
+        return ( 1, 1 )
 
-    def startup(self, animation = True):
+    def init(self, animation = True):
         self.clear_displays()
 
         if animation:
@@ -97,29 +141,31 @@ class Native_Instruments_HID_Device(HID_Device):
 
         self.leds_on(self.LEDColor.WHITE)
 
-    def set_led(self, led_name: str, color: LEDColor):
-        if led_name in self.LED_bytes:
-            self.LED_bytes[led_name] = color
-        else:
-            warning(f"Unknown LED: \"{led_name}\"")
+    def shutdown(self):
+        self.clear_displays()
+        self.leds_off()
 
-    def decode_bit_byte(self, button_name:str, byte:int, bit:int, cur):
-        prev = self.previousReport
-        was_on = (prev[byte] & (1 << bit)) != 0
-        is_on = (cur[byte] & (1 << bit)) != 0
+    def _decode_bit_byte(self, button_name:str, byte:int, bit:int, cur):
+        prev = self._get_previous_report(cur)
+        if prev:
+            was_on = (prev[byte] & (1 << bit)) != 0
+            is_on = (cur[byte] & (1 << bit)) != 0
 
-        if not was_on and is_on:
-            return button_name + ":D"
-        elif was_on and not is_on:
-            return button_name + ":U"
+            if not was_on and is_on:
+                return button_name + ":D"
+            elif was_on and not is_on:
+                return button_name + ":U"
+            else:
+                return None
         else:
             return None
 
     def startup_animation(self):
-        img = ImageOps.invert(self._icon_image("rocket").convert("L")).convert("1")
+        if self.DISPLAY_COUNT > 0:
+            img = ImageOps.invert(self._icon_to_display_image("rocket").convert("L")).convert("1")
 
-        for i in range(0, self.DISPLAY_COUNT):
-            self.write_display_image(i, img)
+            for i in range(0, self.DISPLAY_COUNT):
+                self.write_display_image(i, img)
 
         for c in self.LEDColor_Bright:
             for l in self.LED_bytes:
@@ -131,7 +177,7 @@ class Native_Instruments_HID_Device(HID_Device):
         self.clear_displays()
 
     ##### Display related functions
-    def image_to_packed_bytes(self, img: Image.Image):
+    def _image_to_packed_bytes(self, img: Image.Image):
         """
         Converts a 128x64 Pillow image (mode "1") to 8-page packed bytes.
         Each page is 8 pixels high and 128 pixels wide.
@@ -156,44 +202,7 @@ class Native_Instruments_HID_Device(HID_Device):
 
         return bytes(buf)
 
-    def write_display_image(self, display: int, img: Image.Image):
-        img = ImageOps.invert(img.convert("L")).convert("1")
-        bytes = self.image_to_packed_bytes(img)
-        self.write_display_bytes(display, bytes)
-
-    def write_display_bytes(self, display_number, bytes):
-        part_size = len(bytes) // 4
-        buf = [bytes[i * part_size: (i + 1) * part_size] for i in range(4)]
-
-        self.send_queue.put(bytes.fromhex(f"e{display_number}0000000080000200") + buf[0])
-        self.send_queue.put(bytes.fromhex(f"e{display_number}0000020080000200") + buf[1])
-        self.send_queue.put(bytes.fromhex(f"e{display_number}0000040080000200") + buf[2])
-        self.send_queue.put(bytes.fromhex(f"e{display_number}0000060080000200") + buf[3])
-
-    def clear_display(self, display_number):
-        self.write_display_bytes(display_number, bytes.fromhex("FF" * 1024))
-
-    def white_display(self, display_number):
-        self.write_display_bytes(display_number, bytes.fromhex("00" * 1024))
-
-    def text_to_display(self, display: int, text: str, font="source-sans-pro/SourceSansPro-Regular.ttf", size=22):
-        self.write_display_image(display, self._text_to_display_image(text, font, size))
-
-    def _text_to_display_image(self, text, font: str, size: int):
-        img = Image.new("1", (self.DISPLAY_SIZE[0], self.DISPLAY_SIZE[1]))
-        draw = ImageDraw.Draw(img)
-
-        # Draw example content
-        font = ImageFont.truetype(Path(PROJECT_ROOT) / "fonts" / font, size)
-        draw.text((0, 0), text, fill=1, font=font)
-
-        return img
-
-    def clear_displays(self):
-        for i in range(0, self.DISPLAY_COUNT):
-            self.clear_display(i)
-
-    def _icon_image(self, icon: str):
+    def _icon_to_display_image(self, icon: str):
         # Create the target image (128x64, 1-bit)
         background = Image.new("1", (self.DISPLAY_SIZE[0], self.DISPLAY_SIZE[1]),
                                0)  # 0 = black background
@@ -218,3 +227,40 @@ class Native_Instruments_HID_Device(HID_Device):
         background.paste(icon, (x, y))
 
         return background
+
+    def write_display_image(self, display: int, img: Image.Image):
+        img = ImageOps.invert(img.convert("L")).convert("1")
+        bytes = self._image_to_packed_bytes(img)
+        self._write_display_bytes(display, bytes)
+
+    def _write_display_bytes(self, display_number, bytes):
+        part_size = len(bytes) // 4
+        buf = [bytes[i * part_size: (i + 1) * part_size] for i in range(4)]
+
+        self.send_queue.put(bytes.fromhex(f"e{display_number}0000000080000200") + buf[0])
+        self.send_queue.put(bytes.fromhex(f"e{display_number}0000020080000200") + buf[1])
+        self.send_queue.put(bytes.fromhex(f"e{display_number}0000040080000200") + buf[2])
+        self.send_queue.put(bytes.fromhex(f"e{display_number}0000060080000200") + buf[3])
+
+    def clear_display(self, display_number):
+        self._write_display_bytes(display_number, bytes.fromhex("FF" * 1024))
+
+    def clear_displays(self):
+        for i in range(0, self.DISPLAY_COUNT):
+            self.clear_display(i)
+
+    def white_display(self, display_number):
+        self._write_display_bytes(display_number, bytes.fromhex("00" * 1024))
+
+    def write_text_to_display(self, display: int, text: str, font="source-sans-pro/SourceSansPro-Regular.ttf", size=22, x: int = 0, y: int = 0):
+        self.write_display_image(display, self._text_to_display_image(text, font, size, x, y))
+
+    def _text_to_display_image(self, text, font: str, size: int, x: int = 0, y: int = 0):
+        img = Image.new("1", (self.DISPLAY_SIZE[0], self.DISPLAY_SIZE[1]))
+        draw = ImageDraw.Draw(img)
+
+        # Draw example content
+        font = ImageFont.truetype(Path(PROJECT_ROOT) / "fonts" / font, size)
+        draw.text((x, y), text, fill=1, font=font)
+
+        return img

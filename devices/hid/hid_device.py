@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
+from typing import List
 
 import hid
-
 import devices.device
 
 class HID_Device(devices.device.Device, ABC):
@@ -15,15 +15,15 @@ class HID_Device(devices.device.Device, ABC):
         self.hid_device = None
 
     @abstractmethod
-    def decode_events(self, report):
-        pass
-
-    @abstractmethod
-    def startup(self, animation = True):
+    def init(self, animation = True):
         pass
 
     @abstractmethod
     def shutdown(self):
+        pass
+
+    @abstractmethod
+    def decode_events(self, report):
         pass
 
     def _open_connected_device(self):
@@ -39,8 +39,8 @@ class HID_Device(devices.device.Device, ABC):
     def _read_connected_device(self):
         return self.hid_device.read(self.PACKET_SIZE, timeout=500)
 
-    def _request_control_status_connected_device(self):
-        return self.hid_device.get_input_report(1, self.PACKET_SIZE)
+    def _request_control_status_connected_device(self) -> List[bytes]:
+        return [self.hid_device.get_input_report(1, self.PACKET_SIZE)]
 
     def _exists_connected_device(self):
         if self.hid_device:
