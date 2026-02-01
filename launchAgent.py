@@ -7,10 +7,10 @@ from launchd_plist import Plist
 
 from globals import PROJECT_ROOT
 
-label = "com.stefanchaim.pyMIDI"
+label = "com.stefanchaim.pyConduktor"
 plistPath = Path(f"~/Library/LaunchAgents/{label}.plist").expanduser().resolve()
-stdout_log = Path("/tmp/pyMIDI.log")
-stderr_log = Path("/tmp/pyMIDI.log")
+stdout_log = Path("/tmp/pyConduktor.log")
+stderr_log = Path("/tmp/pyConduktor.log")
 
 
 class MyAgentPlist(Plist):
@@ -22,7 +22,7 @@ class MyAgentPlist(Plist):
 
     # ProgramArguments must include the full interpreter + script
     ProgramArguments = [
-        str(PROJECT_ROOT / "pyMIDI.sh"),
+        str(PROJECT_ROOT / "pyConduktor.sh"),
         "--statusbar"
     ]
 
@@ -35,11 +35,11 @@ class MyAgentPlist(Plist):
     # Standard output and error logs (optional but helpful)
     @property
     def StandardOutPath(self):
-        return str(Path("/tmp/pyMIDI.log"))
+        return str(Path("/tmp/pyConduktor.log"))
 
     @property
     def StandardErrorPath(self):
-        return str(Path("/tmp/pyMIDI.log"))
+        return str(Path("/tmp/pyConduktor.log"))
 
 
 

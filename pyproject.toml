@@ -1,6 +1,6 @@
 [project]
-name = "pymidi"
-version = "0.1.0"
+name = "pyConduktor"
+version = "0.2.0"
 description = "Control your computer with a MIDI or HID Device."
 requires-python = ">=3.13"
 dependencies = [
